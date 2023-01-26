@@ -1,0 +1,5 @@
+0. pettingzoo 사용법
+
+1. multi agent 환경 구성하기
+--> SAT Agent: power control
+--> GT  Agent: selected control

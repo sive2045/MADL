@@ -1,3 +1,5 @@
+SuperSuit==3.6.0
+pettingzoo==1.22.0
 pygame
 ray[rllib,tune]
 tensorflow
