@@ -1,0 +1,6 @@
+pygame
+ray[rllib,tune]
+tensorflow
+tensorflow_probability
+torch
+numpy==1.23.5 
