@@ -49,3 +49,7 @@ class LEOSATEnv(ParallelEnv):
 
         return observations
         
+    def step(self, actions):
+        # Execute actions
+        GS_action = actions["ground_station"]
+        SBS_action = actions["satellite_basesations"]
