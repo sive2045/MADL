@@ -20,6 +20,8 @@ class LEOSATEnv(ParallelEnv):
         self.SBS_x = None # km
         self.SBS_y = None # km
         self.SBS_z = 540  # km
+        self.connected_GS = None
+        self.SBS_power = None
 
         self.timestep = None
 
@@ -37,6 +39,8 @@ class LEOSATEnv(ParallelEnv):
         self.SBS_x = 0 + np.random.normal(0,1)
         self.SBS_y = 0 + np.random.normal(0,1)
         self.SBS_z = 540 + np.random.normal(0,1)
+        self.connected_GS = [False]
+        self.SBS_power = 30 # dB
 
         observation = (
             [self.GS_x, self.GS_y, self.GS_z],
@@ -51,5 +55,11 @@ class LEOSATEnv(ParallelEnv):
         
     def step(self, actions):
         # Execute actions
-        GS_action = actions["ground_station"]
-        SBS_action = actions["satellite_basesations"]
+        GS_action = actions["ground_station"]           # 1: connect rq 0: backoff
+        SBS_action = actions["satellite_basesations"]   # decision power
+
+        if GS_action == 1:
+            pass
+
+
+        
