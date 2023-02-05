@@ -13,9 +13,11 @@ class LEOSATEnv(ParallelEnv):
         self.area_max_y = 100    # km
         self.area_max_z = 1_000  # km
 
-        self.GS_x = None # km
-        self.GS_y = None # km
-        self.GS_z = 0    # km
+        self.GSs_x = None # km
+        self.GSs_y = None # km
+        self.GSs_z = 0    # km
+        self.request = None
+        self.predicted_distance = None # km
 
         self.SBS_x = None # km
         self.SBS_y = None # km
@@ -25,41 +27,58 @@ class LEOSATEnv(ParallelEnv):
 
         self.timestep = None
 
-        self.possible_agents = ["groud_station", "satellite_basesation"]
+        self.possible_agents = ["groud_station_01", "groud_station_02", "satellite_basesation"]
     
     def reset(self, seed=None, return_info=False, options=None):
         self.agents = copy(self.possible_agents)
 
         self.timestep = 0
 
-        self.GS_x = np.random.randint(0,100 + 1) # (0~101]
-        self.GS_y = np.random.randint(0,100 + 1)
-        self.GS_z = 0
+        self.GSs_x = np.random.randint(0,100 + 1, 2) # (0~101]
+        self.GSs_y = np.random.randint(0,100 + 1, 2)
+        self.GSs_z = np.zeros(2)
+        self.request = np.zeros(2)
+        self.predicted_distance = np.zeros(2)
 
         self.SBS_x = 0 + np.random.normal(0,1)
         self.SBS_y = 0 + np.random.normal(0,1)
         self.SBS_z = 540 + np.random.normal(0,1)
-        self.connected_GS = [False]
-        self.SBS_power = 30 # dB
+        self.connected_GSs = [False, False]
+        self.allocated_power = [0, 0]
+        self.SBS_power = 50 # dB
 
-        observation = (
-            [self.GS_x, self.GS_y, self.GS_z],
-            [self.SBS_x, self.SBS_y, self.SBS_z]
-        )
+
+        GS_observation_info = {
+            "coordinate": [self.GSs_x, self.GSs_y, self.GSs_z],
+            "request": self.request,
+            "predicted distance": self.predicted_distance,
+        }
+        SBS_observation_info = {
+            "coordinate": [self.SBS_x, self.SBS_y, self.SBS_z],
+            "connected_gs": self.connected_GSs,
+            "allocated_power": self.allocated_power,
+        }
         observations = {
-            "ground_stations": observation,
-            "satellite_basestation": observation
+            "ground_stations": GS_observation_info,
+            "satellite_basestation": SBS_observation_info
         }
 
         return observations
-        
+    
+    def _distance(self, GS, SBS) -> float:
+        """
+        input: GS and SBS ndarray
+        """
+        return np.linalg.norm(GS-SBS)
+
     def step(self, actions):
         # Execute actions
-        GS_action = actions["ground_station"]           # 1: connect rq 0: backoff
+        GS_actions = actions["ground_stations"]         # 1: connect rq 0: backoff
         SBS_action = actions["satellite_basesations"]   # decision power
 
-        if GS_action == 1:
-            pass
+        for i, action in enumerate(GS_actions):
+            self.request[i] = action
+        
 
 
         
