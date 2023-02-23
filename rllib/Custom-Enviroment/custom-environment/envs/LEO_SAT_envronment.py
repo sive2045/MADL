@@ -22,7 +22,7 @@ class LEOSATEnv(ParallelEnv):
         self.SBS_x = None # km
         self.SBS_y = None # km
         self.SBS_z = 540  # km
-        self.connected_GS = None
+        self.connected_GSs = None
         self.SBS_power = None
 
         self.timestep = None
@@ -73,11 +73,20 @@ class LEOSATEnv(ParallelEnv):
 
     def step(self, actions):
         # Execute actions
-        GS_actions = actions["ground_stations"]         # 1: connect rq 0: backoff
-        SBS_action = actions["satellite_basesations"]   # decision power
+        GS_actions = actions["ground_stations"]          # 1: connect rq 0: backoff
+        SBS_actions = actions["satellite_basesations"]   # decision power
 
-        for i, action in enumerate(GS_actions):
-            self.request[i] = action
+        for i in range(len(GS_actions)):
+            self.connected_GSs = GS_actions[i]
+            self.allocated_power = SBS_actions[i]
+
+            if self.connected_GSs:
+                pass
+            else:
+                if self.allocated_power > 0:
+                    SBS_reward = -1
+                else:
+                    SBS_reward = 0
         
 
 
