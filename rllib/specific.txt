@@ -1,8 +1,17 @@
+===========================================================================
+* SAT 
 Elevation Angle: 90 ~ 84 degree
-Coverage Area: 500 km (radius)
+Coverage Area: 50 km (radius)
+Rotation Speed: 7.8 km/s
 
 SAT plane: 2
 # of SAT per plane: 22 (TBD)
-Coordination: 
+Coordinate:
 		First  plane: (0, 0) -> (65, 0) -> ,,, -> (65x, 0)
 		Second plane: (25, 65) -> (90, 65) -> ,,, -> (25+65x, 65)
+		+ Gaussian Distribution (coord noise)
+
+===========================================================================
+* USER (Ground Basement, fixed)
+# of Uesr: 10
+Coordinate: (0,0) ~ (100,100); rectangle

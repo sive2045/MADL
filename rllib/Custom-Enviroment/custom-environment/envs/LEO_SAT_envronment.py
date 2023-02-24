@@ -13,40 +13,50 @@ class LEOSATEnv(ParallelEnv):
         self.area_max_y = 100    # km
         self.area_max_z = 1_000  # km
 
-        self.GSs_x = None # km
-        self.GSs_y = None # km
-        self.GSs_z = 0    # km
-        self.request = None
-        self.predicted_distance = None # km
+        self.GS_size = 10
+        self.GS = np.zeros((self.GS_size, 3)) # coordinate (x, y, z) of GS
 
-        self.SBS_x = None # km
-        self.SBS_y = None # km
-        self.SBS_z = 540  # km
-        self.connected_GSs = None
-        self.SBS_power = None
+        self.SAT_len = 130
+        self.SAT_coverage_radius = 55 # km
+        self.SAT_speed = 7.9 # km/s
+        self.theta = np.linspace(0, 2 * np.pi, 150)
+        self.SAT_0 = np.zeros((self.SAT_len, 3, 150)) # coordinate (x, y, z) of SAT (plane 1)
+        self.SAT_1 = np.zeros((self.SAT_len, 3, 150)) # coordinate (x, y, z) of SAT (plane 2)
+        self.SAT_0[:,2,:] = 500 # km, SAT height 
+        self.SAT_1[:,2,:] = 500 # km, SAT height 
 
         self.timestep = None
 
-        self.possible_agents = ["groud_station_01", "groud_station_02", "satellite_basesation"]
+        self.possible_agents = [
+            "groud_station_00", "groud_station_01", "groud_station_02",
+            "groud_station_03", "groud_station_04", "groud_station_05",
+            "groud_station_06", "groud_station_07", "groud_station_08",
+            "groud_station_09"
+            ]
     
+    def _SAT_location(self, SAT_0, SAT_1, SAT_len, time, speed, radius, theta):
+        for i in range(SAT_len):
+            SAT_0[i][0][:] = 65*i -speed * time + radius * np.cos(theta)
+            SAT_0[i][1][:] =  10                + radius * np.sin(theta)
+
+            SAT_1[i][0][:] = -25 + 65*i -speed * time + radius * np.cos(theta)
+            SAT_1[i][1][:] =  10 +   65               + radius * np.sin(theta)
+
+        return SAT_0, SAT_1
+
     def reset(self, seed=None, return_info=False, options=None):
         self.agents = copy(self.possible_agents)
 
         self.timestep = 0
 
-        self.GSs_x = np.random.randint(0,100 + 1, 2) # (0~101]
-        self.GSs_y = np.random.randint(0,100 + 1, 2)
-        self.GSs_z = np.zeros(2)
-        self.request = np.zeros(2)
-        self.predicted_distance = np.zeros(2)
+        # set GS position
+        for i in range(self.GS_size):
+            self.GS[i][0] = np.random.randint(0,100 + 1)
+            self.GS[i][1] = np.random.randint(0,100 + 1)
 
-        self.SBS_x = 0 + np.random.normal(0,1)
-        self.SBS_y = 0 + np.random.normal(0,1)
-        self.SBS_z = 540 + np.random.normal(0,1)
-        self.connected_GSs = [False, False]
-        self.allocated_power = [0, 0]
-        self.SBS_power = 50 # dB
-
+        # set SAT position
+        self.SAT_0, self.SAT_1 = self._SAT_location(self.SAT_0, self.SAT_1, self.SAT_len, self.timestep, 
+                                                    self.SAT_speed, self.SAT_coverage_radius, self.theta)
 
         GS_observation_info = {
             "coordinate": [self.GSs_x, self.GSs_y, self.GSs_z],
@@ -65,11 +75,6 @@ class LEOSATEnv(ParallelEnv):
 
         return observations
     
-    def _distance(self, GS, SBS) -> float:
-        """
-        input: GS and SBS ndarray
-        """
-        return np.linalg.norm(GS-SBS)
 
     def step(self, actions):
         # Execute actions
