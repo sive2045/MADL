@@ -11,6 +11,7 @@ Coordinate:
 		Second plane: (25, 65) -> (90, 65) -> ,,, -> (25+65x, 65)
 		+ Gaussian Distribution (coord noise)
 
+Episode Time: 0 ~ 155 (s)
 ===========================================================================
 * USER (Ground Basement, fixed)
 # of Uesr: 10
