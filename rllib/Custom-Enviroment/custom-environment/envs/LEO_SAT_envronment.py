@@ -16,6 +16,9 @@ class LEOSATEnv(ParallelEnv):
         self.GS_size = 10
         self.GS = np.zeros((self.GS_size, 3)) # coordinate (x, y, z) of GS
 
+        self.timestep = None
+        self.terminal_time = 155 # s
+
         self.SAT_len = 22
         self.SAT_plane = 2 # of plane
         self.SAT_coverage_radius = 55 # km
@@ -23,11 +26,13 @@ class LEOSATEnv(ParallelEnv):
         self.theta = np.linspace(0, 2 * np.pi, 150)
         self.SAT_point = np.zeros((self.SAT_len * self.SAT_plane, 3)) # coordinate (x, y, z) of SAT center point
         self.SAT_coverage = np.zeros((self.SAT_len * self.SAT_plane, 3, 150)) # coordinate (x, y, z) of SAT coverage
-        self.SAT_point[:,2,:] = 500 # km, SAT height 
+        self.SAT_point[:,2] = 500 # km, SAT height 
         self.SAT_coverage[:,2,:] = 500 # km, SAT height
+        self.SAT_Load = np.full(self.SAT_len*self.SAT_plane, 5) # the available channels of SAT
+        self.SAT_W = 10 # MHz BW budget of SAT
 
-        self.timestep = None
-        self.terminal_time = 155 # s
+        self.service_indicator = np.zeros((self.GS_size, self.SAT_len*2)) # indicator: users are served by SAT
+
 
         self.possible_agents = [
             "groud_station_00", "groud_station_01", "groud_station_02",
@@ -63,9 +68,23 @@ class LEOSATEnv(ParallelEnv):
 
         return SAT_coverage
 
-    def _is_in_coverage(self, SAT, GS):
-        pass
+    def _is_in_coverage(self, SAT, GS, coverage_radius):
+        """
+        return coverage indicator (one-hot vector)
+        """
+        dist = np.zeros((len(GS), len(SAT)))
+        coverage_indicator = np.zeros((len(GS), len(SAT)))
 
+        for i in range(len(GS)):
+            for j in range(len(SAT)):
+                dist[i][j] = np.linalg.norm(GS[i] - SAT[j])
+        
+        coverage_index = np.where(dist <= coverage_radius)
+        coverage_indicator[coverage_index[:][0], coverage_index[:][1]] = 1
+
+        return coverage_indicator        
+
+        
     def reset(self, seed=None, return_info=False, options=None):
         self.agents = copy(self.possible_agents)
 
@@ -78,6 +97,8 @@ class LEOSATEnv(ParallelEnv):
 
         # set SAT position
         self.SAT_point = self._SAT_coordinate(self.SAT_point, self.SAT_len, self.timestep, self.SAT_speed)
+        # coverage indicator
+        self.coverage_indicator = self._is_in_coverage(self.SAT_point, self.GS, self.SAT_coverage_radius)
 
         GS_observation_info = {
             "coordinate": [self.GSs_x, self.GSs_y, self.GSs_z],
