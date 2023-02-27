@@ -1,7 +1,7 @@
 ===========================================================================
 * SAT 
 Elevation Angle: 90 ~ 84 degree
-Coverage Area: 50 km (radius)
+Coverage Area: 55 km (radius)
 Rotation Speed: 7.8 km/s
 
 SAT plane: 2
