@@ -22,7 +22,7 @@ class LEOSATEnv(ParallelEnv):
         self.SAT_len = 22
         self.SAT_plane = 2 # of plane
         self.SAT_coverage_radius = 55 # km
-        self.SAT_speed = 7.9 # km/s
+        self.SAT_speed = 7.9 # km/s, caution!! direction
         self.theta = np.linspace(0, 2 * np.pi, 150)
         self.SAT_point = np.zeros((self.SAT_len * self.SAT_plane, 3)) # coordinate (x, y, z) of SAT center point
         self.SAT_coverage = np.zeros((self.SAT_len * self.SAT_plane, 3, 150)) # coordinate (x, y, z) of SAT coverage
@@ -31,8 +31,7 @@ class LEOSATEnv(ParallelEnv):
         self.SAT_Load = np.full(self.SAT_len*self.SAT_plane, 5) # the available channels of SAT
         self.SAT_W = 10 # MHz BW budget of SAT
 
-        self.service_indicator = np.zeros((self.GS_size, self.SAT_len*2)) # indicator: users are served by SAT
-
+        self.service_indicator = np.zeros((self.GS_size, self.SAT_len*2)) # indicator: users are served by SAT (one-hot vector)
 
         self.possible_agents = [
             "groud_station_00", "groud_station_01", "groud_station_02",
@@ -84,7 +83,15 @@ class LEOSATEnv(ParallelEnv):
 
         return coverage_indicator        
 
+    def _visible_time(self, SAT_point, SAT_speed, coverage_radius, GS):
+        """
+        return visible time btw SAT and GS
+        """
+        visible_time = (np.sqrt(coverage_radius ** 2 - (GS[1]-SAT_point[1]) ** 2) - GS[0] + SAT_point[0]) / SAT_speed
+        visible_time = np.max((visible_time, 0))
         
+        return visible_time        
+
     def reset(self, seed=None, return_info=False, options=None):
         self.agents = copy(self.possible_agents)
 
@@ -121,6 +128,14 @@ class LEOSATEnv(ParallelEnv):
     def step(self, actions):
         # Execute actions
         GS_actions = actions["ground_stations"]          # one-hot encoding
+
+        # Check termination conditions
+        terminations = {a: False for a in self.agents}
+        rewards = {a: 0 for a in self.agents}
+
+        if self.timestep == self.terminal_time:
+            pass
+
         
 
         
