@@ -134,8 +134,12 @@ class LEOSATEnv(ParallelEnv):
         rewards = {a: 0 for a in self.agents}
 
         if self.timestep == self.terminal_time:
-            pass
+            terminations = {a: True for a in self.agents}
+            self.agents = []
 
+        # Get obersvations
+
+        # Rewards
         
 
         
