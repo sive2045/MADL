@@ -83,7 +83,7 @@ class LEOSATEnv(ParallelEnv):
 
         return coverage_indicator        
 
-    def _visible_time(self, SAT_point, SAT_speed, coverage_radius, GS):
+    def _get_visible_time(self, SAT_point, SAT_speed, coverage_radius, GS):
         """
         return visible time btw SAT and GS
         """
@@ -91,6 +91,7 @@ class LEOSATEnv(ParallelEnv):
         visible_time = np.max((visible_time, 0))
         
         return visible_time        
+
 
     def reset(self, seed=None, return_info=False, options=None):
         self.agents = copy(self.possible_agents)
@@ -106,21 +107,21 @@ class LEOSATEnv(ParallelEnv):
         self.SAT_point = self._SAT_coordinate(self.SAT_point, self.SAT_len, self.timestep, self.SAT_speed)
         # coverage indicator
         self.coverage_indicator = self._is_in_coverage(self.SAT_point, self.GS, self.SAT_coverage_radius)
+        # visible time
+        self.visible_time = np.zeros((self.GS_size,self.SAT_len*2))
+        for i in range(self.GS_size):
+            for j in range(self.SAT_len*2):
+                self.visible_time[i][j] = self._get_visible_time(self.SAT_point[j], self.SAT_speed, self.SAT_coverage_radius, self.GS[i])
 
-        GS_observation_info = {
-            "coordinate": [self.GSs_x, self.GSs_y, self.GSs_z],
-            "request": self.request,
-            "predicted distance": self.predicted_distance,
-        }
-        SBS_observation_info = {
-            "coordinate": [self.SBS_x, self.SBS_y, self.SBS_z],
-            "connected_gs": self.connected_GSs,
-            "allocated_power": self.allocated_power,
-        }
-        observations = {
-            "ground_stations": GS_observation_info,
-            "satellite_basestation": SBS_observation_info
-        }
+        # observations
+        observations = {}
+        for i in range(self.GS_size):
+            observation = (
+                self.coverage_indicator[i],
+                self.SAT_Load,
+                self.visible_time[i]
+            )
+            observations[f"groud_station_0{i}"] = observation
 
         return observations
     
