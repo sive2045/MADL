@@ -16,3 +16,11 @@ Episode Time: 0 ~ 155 (s)
 * USER (Ground Basement, fixed)
 # of Uesr: 10
 Coordinate: (0,0) ~ (100,100); rectangle
+===========================================================================
+* POMDP
+# State: <covering_info, available_channel, visible_time>
+# Action: indicator SAT service to GS
+# Reward: 
+	Case 1. -20, HO occur
+	Case 2. -10, HO occur
+	Case 3. visible_time, HO occur
