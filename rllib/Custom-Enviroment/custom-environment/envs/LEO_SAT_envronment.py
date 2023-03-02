@@ -1,5 +1,6 @@
 import functools
 import random
+import matplotlib.pyplot as plt
 from copy import copy
 
 import numpy as np
@@ -33,39 +34,36 @@ class LEOSATEnv(ParallelEnv):
 
         self.service_indicator = np.zeros((self.GS_size, self.SAT_len*2)) # indicator: users are served by SAT (one-hot vector)
 
-        self.possible_agents = [
-            "groud_station_00", "groud_station_01", "groud_station_02",
-            "groud_station_03", "groud_station_04", "groud_station_05",
-            "groud_station_06", "groud_station_07", "groud_station_08",
-            "groud_station_09"
-            ]
+        self.possible_agents = [f"groud_station_{i}" for i in range(self.GS_size)]
     
     def _SAT_coordinate(self, SAT, SAT_len, time, speed):
         """
         return real-time SAT center point
         """
+        _SAT = np.copy(SAT)
         for i in range(SAT_len):
-            SAT[i,0] = 65*i -speed * time
-            SAT[i,1] = 10
+            _SAT[i,0] = 65*i -speed * time
+            _SAT[i,1] = 10
 
-            SAT[i + SAT_len,0] = -25 + 65*i -speed * time
-            SAT[i+ SAT_len,1] =  10 + 65
+            _SAT[i + SAT_len,0] = -25 + 65*i -speed * time
+            _SAT[i+ SAT_len,1] =  10 + 65
         
-        return SAT
+        return _SAT
 
     def _SAT_coverage_position(self, SAT_coverage, SAT_len, time, speed, radius, theta):
         """
         return real-time SAT coverage position
         for render
         """
+        _SAT_coverage = np.copy(SAT_coverage)
         for i in range(SAT_len):
-            SAT_coverage[i,0,:] = 65*i -speed * time + radius * np.cos(theta)
-            SAT_coverage[i,1,:] =  10                + radius * np.sin(theta)
+            _SAT_coverage[i,0,:] = 65*i -speed * time + radius * np.cos(theta)
+            _SAT_coverage[i,1,:] =  10                + radius * np.sin(theta)
 
-            SAT_coverage[i + SAT_len,0,:] = -25 + 65*i -speed * time + radius * np.cos(theta)
-            SAT_coverage[i + SAT_len,1,:] =  10 +   65               + radius * np.sin(theta)
+            _SAT_coverage[i + SAT_len,0,:] = -25 + 65*i -speed * time + radius * np.cos(theta)
+            _SAT_coverage[i + SAT_len,1,:] =  10 +   65               + radius * np.sin(theta)
 
-        return SAT_coverage
+        return _SAT_coverage
 
     def _is_in_coverage(self, SAT, GS, coverage_radius):
         """
@@ -121,30 +119,107 @@ class LEOSATEnv(ParallelEnv):
                 self.SAT_Load,
                 self.visible_time[i]
             )
-            observations[f"groud_station_0{i}"] = observation
+            observations[self.agents[i]] = observation
 
         return observations
     
 
     def step(self, actions):
-        # Execute actions
-        GS_actions = actions["ground_stations"]          # one-hot encoding
+        # Execute actions and Get Rewards
+        # Action must select a covering SAT
+        GS_actions = actions["ground_stations"] 
 
-        # Check termination conditions
-        terminations = {a: False for a in self.agents}
         rewards = {a: 0 for a in self.agents}
+        for i in range(self.GS_size):
+            reward = 0
+            # HO occur
+            if self.service_indicator[GS_actions[i]] == 0:
+                reward = -10
+            else:
+                if GS_actions.count(GS_actions[i]) > self.SAT_Load:
+                    reward = -5
+                else:
+                    reward = self.visible_time[i][GS_actions[i]]
+            reward[self.agents[i]] = reward
+        
+        # Check termination conditions
+        terminations = {a: False for a in self.agents}        
 
         if self.timestep == self.terminal_time:
             terminations = {a: True for a in self.agents}
             self.agents = []
 
+        # Get info
+        infos = {}
+        for i in range(self.GS_size):
+            infos[self.agents[i]] = {"time step":self.timestep, "selected SAT":GS_actions[i], "status":rewards[i]}
+
         # Get obersvations
-
-        # Rewards
+        self.timestep += 1
         
-
+        # Get SAT position
+        self.SAT_point = self._SAT_coordinate(self.SAT_point, self.SAT_len, self.timestep, self.SAT_speed)
+        # Get coverage indicator
+        self.coverage_indicator = self._is_in_coverage(self.SAT_point, self.GS, self.SAT_coverage_radius)
+        # Get visible time        
+        for i in range(self.GS_size):
+            for j in range(self.SAT_len*2):
+                self.visible_time[i][j] = self._get_visible_time(self.SAT_point[j], self.SAT_speed, self.SAT_coverage_radius, self.GS[i])
         
+        observations = {}
+        for i in range(self.GS_size):
+            observation = (
+                self.coverage_indicator[i],
+                self.SAT_Load,
+                self.visible_time[i]
+            )
+            observations[f"groud_station_{i}"] = observation
+
+        # Get truncations: this senario does not need
+        truncations = {self.agents[i]: False for i in range(self.GS_size)}
+
+        return observations, rewards, terminations, truncations, infos
         
+    def render(self):
+        """
+        Caution time step !!
+        -> execute this func before step func
+        """
+        figure, axes = plt.subplots(1)
+        
+        SAT_area = self._SAT_coverage_position(self.SAT_coverage, self.SAT_len, self.timestep, self.SAT_speed, self.SAT_coverage_radius, self.theta)        
+
+        for i in range(self.SAT_len * self.SAT_plane):
+            axes.plot(SAT_area[i,0,:], SAT_area[i,1,:])
+        
+        axes.plot([0,100,100,0,0], [0,0,100,100,0])
+        axes.plot(self.GS[:,0], self.GS[:,1], '*')
+
+        axes.set_aspect(1)
+        axes.axis([-50, 200, -50, 150])
+        axes.plot(self.SAT_point[:,0], self.SAT_point[:,1], 'o')
+
+        plt.show()
+
+    @functools.lru_cache(maxsize=None)
+    def observation_space(self, agent):
+        return MultiDiscrete([self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane])
+
+    @functools.lru_cache(maxsize=None)
+    def action_space(self, agent):
+        return Discrete(self.GS_size)
 
 
-        
+ # test       
+if __name__ == "__main__":
+    env = LEOSATEnv()
+    env.reset()
+    env.render()
+    actions = np.random.randint(0,4, (100,2))
+    for i in range(100):
+        _actions = {
+            "prisoner": actions[i][0],
+            "guard": actions[i][1]
+        }
+        (observations, rewards, terminations, truncations, infos) = env.step(_actions)
+        env.render()
