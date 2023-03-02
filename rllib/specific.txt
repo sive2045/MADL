@@ -20,7 +20,8 @@ Coordinate: (0,0) ~ (100,100); rectangle
 * POMDP
 # State: <covering_info, available_channel, visible_time>
 # Action: indicator SAT service to GS
-# Reward: 
+# Reward:
+	Case 0. -20, Non-service area
 	Case 1. -10, HO occur
 	Case 2. -5, Overload
 	Case 3. visible_time, ACK (MAX 14.10)

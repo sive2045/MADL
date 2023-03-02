@@ -74,18 +74,19 @@ class LEOSATEnv(ParallelEnv):
 
         for i in range(len(GS)):
             for j in range(len(SAT)):
-                dist[i][j] = np.linalg.norm(GS[i] - SAT[j])
-        
+                dist[i][j] = np.linalg.norm(GS[i,0:2] - SAT[j,0:2]) # 2-dim 
+        #print(f"debuging dist: {dist}")
         coverage_index = np.where(dist <= coverage_radius)
+        #print(f"debuging index: {coverage_index}")
         coverage_indicator[coverage_index[:][0], coverage_index[:][1]] = 1
-
         return coverage_indicator        
 
     def _get_visible_time(self, SAT_point, SAT_speed, coverage_radius, GS):
         """
         return visible time btw SAT and GS
         """
-        visible_time = (np.sqrt(coverage_radius ** 2 - (GS[1]-SAT_point[1]) ** 2) - GS[0] + SAT_point[0]) / SAT_speed
+        _num = np.max((coverage_radius ** 2 - (GS[1]-SAT_point[1]) ** 2, 0))
+        visible_time = (np.sqrt(_num) - GS[0] + SAT_point[0]) / SAT_speed
         visible_time = np.max((visible_time, 0))
         
         return visible_time        
@@ -127,21 +128,31 @@ class LEOSATEnv(ParallelEnv):
     def step(self, actions):
         # Execute actions and Get Rewards
         # Action must select a covering SAT
-        GS_actions = actions["ground_stations"] 
+        GS_actions = actions.copy()
 
         rewards = {a: 0 for a in self.agents}
         for i in range(self.GS_size):
             reward = 0
+
+            # non-coverage area
+            if self.coverage_indicator[i][GS_actions[i]] == 0:
+                reward = -20
             # HO occur
-            if self.service_indicator[GS_actions[i]] == 0:
+            elif self.service_indicator[i][GS_actions[i]] == 0:
                 reward = -10
             else:
-                if GS_actions.count(GS_actions[i]) > self.SAT_Load:
+            # Overload
+                if np.count_nonzero(GS_actions == GS_actions[i]) > self.SAT_Load[GS_actions[i]]:
                     reward = -5
                 else:
                     reward = self.visible_time[i][GS_actions[i]]
-            reward[self.agents[i]] = reward
+            rewards[self.agents[i]] = reward
         
+        # Update service indicator
+        self.service_indicator = np.zeros((self.GS_size, self.SAT_len*self.SAT_plane))
+        for i in range(self.GS_size):
+            self.service_indicator[i][GS_actions[i]] = 1
+
         # Check termination conditions
         terminations = {a: False for a in self.agents}        
 
@@ -152,7 +163,7 @@ class LEOSATEnv(ParallelEnv):
         # Get info
         infos = {}
         for i in range(self.GS_size):
-            infos[self.agents[i]] = {"time step":self.timestep, "selected SAT":GS_actions[i], "status":rewards[i]}
+            infos[self.agents[i]] = {"time step":self.timestep, "selected SAT":GS_actions[i], "status":rewards[self.agents[i]]}
 
         # Get obersvations
         self.timestep += 1
@@ -207,19 +218,24 @@ class LEOSATEnv(ParallelEnv):
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        return Discrete(self.GS_size)
+        return MultiDiscrete([self.GS_size, self.SAT_len * self.SAT_plane])
 
 
- # test       
+# test       
 if __name__ == "__main__":
     env = LEOSATEnv()
-    env.reset()
-    env.render()
-    actions = np.random.randint(0,4, (100,2))
-    for i in range(100):
-        _actions = {
-            "prisoner": actions[i][0],
-            "guard": actions[i][1]
-        }
-        (observations, rewards, terminations, truncations, infos) = env.step(_actions)
+    observation = env.reset()
+    print(f"init observation: {observation}")
+    actions = np.random.randint(0,44, (155,10))
+    actions = np.array([
+        [1,1,1,1,1,0,0,0,0,0],
+        [1,1,1,1,1,0,0,0,0,0],
+        [1,1,1,1,1,0,0,0,0,0]
+    ])
+    for i in range(3):
         env.render()
+        _actions = actions[i]
+        print(f"{i}-step selected actions: {_actions}")
+        (observations, rewards, terminations, truncations, infos) = env.step(_actions)
+        print(f"observations: {observations}")
+        print(f"rewards: {rewards}")
