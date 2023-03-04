@@ -6,11 +6,12 @@ from copy import copy
 import numpy as np
 from gymnasium.spaces import Discrete, MultiDiscrete
 
-from pettingzoo.utils.env import ParallelEnv
+from pettingzoo.utils import agent_selector, wrappers
+from pettingzoo.utils.conversions import parallel_wrapper_fn
 from pettingzoo import AECEnv
 
-class LEOSATEnv(ParallelEnv):
-    def __init__(self) -> None:
+class LEOSATEnv(AECEnv):
+    def __init__(self, render_mode=None) -> None:
         self.area_max_x = 100    # km
         self.area_max_y = 100    # km
         self.area_max_z = 1_000  # km
@@ -35,8 +36,41 @@ class LEOSATEnv(ParallelEnv):
 
         self.service_indicator = np.zeros((self.GS_size, self.SAT_len*2)) # indicator: users are served by SAT (one-hot vector)
 
-        self.possible_agents = [f"groud_station_{i}" for i in range(self.GS_size)]
+        self.agents = [f"groud_station_{i}" for i in range(self.GS_size)]
+        self.possible_agents = self.agents[:]
+
+        self._none = self.SAT_len * self.SAT_plane
+        self.action_spaces = {agent: Discrete(self.SAT_len * self.SAT_plane) for agent in self.agents}
+        self.observation_spaces = {
+            agent: MultiDiscrete([self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane]) for agent in self.agents
+        }
+
+        self.render_mode = render_mode        
+
     
+    def observation_space(self, agent):
+        return self.observation_spaces[agent]
+
+    def action_space(self, agent):
+        return self.action_spaces[agent]
+
+    # def reinit(self):
+    #     self.agents = self.possible_agents[:]
+    #     self._agent_selector = agent_selector(self.agents)
+    #     self.agent_selection = self._agent_selector.next()
+    #     self.rewards = {agent: 0 for agent in self.agents}
+    #     self._cumulative_rewards = {agent: 0 for agent in self.agents}
+    #     self.terminations = {agent: False for agent in self.agents}
+    #     self.truncations = {agent: False for agent in self.agents}
+    #     self.infos = {agent: {} for agent in self.agents}
+
+    #     self.state = {agent: self._none for agent in self.agents}
+    #     self.observations = {agent: self._none for agent in self.agents}
+
+    #     self.history = [0] * (2 * 5)
+
+    #     self.num_moves = 0
+
     def _SAT_coordinate(self, SAT, SAT_len, time, speed):
         """
         return real-time SAT center point
@@ -98,6 +132,18 @@ class LEOSATEnv(ParallelEnv):
 
         self.timestep = 0
 
+        self.agents = self.possible_agents[:]
+        self._agent_selector = agent_selector(self.agents)
+        self.agent_selection = self._agent_selector.next()
+
+        self.state = {agent: self._none for agent in self.agents}
+        self.rewards = {agent: 0 for agent in self.agents}
+        self._cumulative_rewards = {agent: 0 for agent in self.agents}
+        self.terminations = {agent: False for agent in self.agents}
+        self.truncations = {agent: False for agent in self.agents}
+        self.infos = {agent: {} for agent in self.agents}
+        #self.observations = {agent: self._none for agent in self.agents}
+
         # set GS position
         for i in range(self.GS_size):
             self.GS[i][0] = np.random.randint(0,100 + 1)
@@ -114,83 +160,92 @@ class LEOSATEnv(ParallelEnv):
                 self.visible_time[i][j] = self._get_visible_time(self.SAT_point[j], self.SAT_speed, self.SAT_coverage_radius, self.GS[i])
 
         # observations
-        observations = {}
+        self.observations = {}
         for i in range(self.GS_size):
             observation = (
                 self.coverage_indicator[i],
                 self.SAT_Load,
                 self.visible_time[i]
             )
-            observations[self.agents[i]] = observation
+            self.observations[self.agents[i]] = observation
 
-        return observations
+        #return self.observations
     
+    def observe(self, agent):
+        # observation of one agent is the previous state of the other
+        return np.array(self.observations[agent])
 
-    def step(self, actions):
+    def step(self, action):
+        if (
+            self.terminations[self.agent_selection]
+            or self.truncations[self.agent_selection]
+        ):
+            self._was_dead_step(action)
+            return
         # Execute actions and Get Rewards
         # Action must select a covering SAT
-        GS_actions = actions.copy()
+        agent = self.agent_selection
+        print(f"agent: {agent}")
+        self.state[self.agent_selection] = action
+        print(f"state : {self.state[agent]}")
+        if self._agent_selector.is_last():
+            # rewards
+            for i in range(self.GS_size):
+                reward = 0
 
-        rewards = {a: 0 for a in self.agents}
-        for i in range(self.GS_size):
-            reward = 0
-
-            # non-coverage area
-            if self.coverage_indicator[i][GS_actions[i]] == 0:
-                reward = -20
-            # HO occur
-            elif self.service_indicator[i][GS_actions[i]] == 0:
-                reward = -10
-            else:
-            # Overload
-                if np.count_nonzero(GS_actions == GS_actions[i]) > self.SAT_Load[GS_actions[i]]:
-                    reward = -5
+                # non-coverage area
+                if self.coverage_indicator[i][self.state[self.agents[i]]] == 0:
+                    reward = -20
+                # HO occur
+                elif self.service_indicator[i][self.state[self.agents[i]]] == 0:
+                    reward = -10
                 else:
-                    reward = self.visible_time[i][GS_actions[i]]
-            rewards[self.agents[i]] = reward
+                # Overload
+                    if np.count_nonzero(self.state[self.agents[:]] == self.state[self.agents[i]]) > self.SAT_Load[i]:
+                        reward = -5
+                    else:
+                        reward = self.visible_time[i][self.state[self.agents[i]]]
+                self.rewards[self.agents[i]] = reward
         
-        # Update service indicator
-        self.service_indicator = np.zeros((self.GS_size, self.SAT_len*self.SAT_plane))
-        for i in range(self.GS_size):
-            self.service_indicator[i][GS_actions[i]] = 1
+            # Update service indicator
+            self.service_indicator = np.zeros((self.GS_size, self.SAT_len*self.SAT_plane))
+            for i in range(self.GS_size):
+                self.service_indicator[i][self.state[self.agents[i]]] = 1
+    
+            # Check termination conditions
+            if self.timestep == self.terminal_time:
+                self.terminations = {agent: True for agent in self.agents}
 
-        # Check termination conditions
-        terminations = {a: False for a in self.agents}        
+            # Get obersvations
+            self.timestep += 1
 
-        if self.timestep == self.terminal_time:
-            terminations = {a: True for a in self.agents}
-            self.agents = []
-
-        # Get info
-        infos = {}
-        for i in range(self.GS_size):
-            infos[self.agents[i]] = {"time step":self.timestep, "selected SAT":GS_actions[i], "status":rewards[self.agents[i]]}
-
-        # Get obersvations
-        self.timestep += 1
+            # Get SAT position
+            self.SAT_point = self._SAT_coordinate(self.SAT_point, self.SAT_len, self.timestep, self.SAT_speed)
+            # Get coverage indicator
+            self.coverage_indicator = self._is_in_coverage(self.SAT_point, self.GS, self.SAT_coverage_radius)
+            # Get visible time        
+            for i in range(self.GS_size):
+                for j in range(self.SAT_len*2):
+                    self.visible_time[i][j] = self._get_visible_time(self.SAT_point[j], self.SAT_speed, self.SAT_coverage_radius, self.GS[i])
+            
+            for i in range(self.GS_size):
+                observation = (
+                    self.coverage_indicator[i],
+                    self.SAT_Load,
+                    self.visible_time[i]
+                )
+                self.observations[f"groud_station_{i}"] = observation
+        else:
+            self._clear_rewards()
         
-        # Get SAT position
-        self.SAT_point = self._SAT_coordinate(self.SAT_point, self.SAT_len, self.timestep, self.SAT_speed)
-        # Get coverage indicator
-        self.coverage_indicator = self._is_in_coverage(self.SAT_point, self.GS, self.SAT_coverage_radius)
-        # Get visible time        
-        for i in range(self.GS_size):
-            for j in range(self.SAT_len*2):
-                self.visible_time[i][j] = self._get_visible_time(self.SAT_point[j], self.SAT_speed, self.SAT_coverage_radius, self.GS[i])
-        
-        observations = {}
-        for i in range(self.GS_size):
-            observation = (
-                self.coverage_indicator[i],
-                self.SAT_Load,
-                self.visible_time[i]
-            )
-            observations[f"groud_station_{i}"] = observation
+        self._cumulative_rewards[self.agent_selection] = 0
+        self.agent_selection = self._agent_selector.next()
+        self._accumulate_rewards()
 
-        # Get truncations: this senario does not need
-        truncations = {self.agents[i]: False for i in range(self.GS_size)}
+        if self.render_mode == "human":
+            self.render()
 
-        return observations, rewards, terminations, truncations, infos
+        #return self.observations, self.rewards, self.terminations, self.truncations, self.infos
         
     def render(self):
         """
@@ -213,13 +268,7 @@ class LEOSATEnv(ParallelEnv):
 
         plt.show()
 
-    #@functools.lru_cache(maxsize=None)
-    def observation_space(self, agent):
-        return MultiDiscrete([self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane])
-
-    #@functools.lru_cache(maxsize=None)
-    def action_space(self, agent):
-        return MultiDiscrete([self.GS_size, self.SAT_len * self.SAT_plane])
+    
 
 
 # test       
