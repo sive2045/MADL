@@ -5,9 +5,9 @@ from copy import copy
 
 import numpy as np
 from gymnasium.spaces import Discrete, MultiDiscrete
+from gymnasium import spaces
 
 from pettingzoo.utils import agent_selector, wrappers
-from pettingzoo.utils.conversions import parallel_wrapper_fn
 from pettingzoo import AECEnv
 
 class LEOSATEnv(AECEnv):
@@ -40,9 +40,16 @@ class LEOSATEnv(AECEnv):
         self.possible_agents = self.agents[:]
 
         self._none = self.SAT_len * self.SAT_plane
-        self.action_spaces = {agent: Discrete(self.SAT_len * self.SAT_plane) for agent in self.agents}
+        self.action_spaces = {i: spaces.Discrete(self.SAT_len * self.SAT_plane) for i in self.agents}
         self.observation_spaces = {
-            agent: MultiDiscrete([self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane]) for agent in self.agents
+            i: spaces.Dict(
+                {
+                    "observation": spaces.Box(
+                        low=0, high=1, shape=(self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane), dtype=np.int8
+                    ),
+                }
+            )
+            for i in self.agents
         }
 
         self.render_mode = render_mode        
@@ -54,22 +61,6 @@ class LEOSATEnv(AECEnv):
     def action_space(self, agent):
         return self.action_spaces[agent]
 
-    # def reinit(self):
-    #     self.agents = self.possible_agents[:]
-    #     self._agent_selector = agent_selector(self.agents)
-    #     self.agent_selection = self._agent_selector.next()
-    #     self.rewards = {agent: 0 for agent in self.agents}
-    #     self._cumulative_rewards = {agent: 0 for agent in self.agents}
-    #     self.terminations = {agent: False for agent in self.agents}
-    #     self.truncations = {agent: False for agent in self.agents}
-    #     self.infos = {agent: {} for agent in self.agents}
-
-    #     self.state = {agent: self._none for agent in self.agents}
-    #     self.observations = {agent: self._none for agent in self.agents}
-
-    #     self.history = [0] * (2 * 5)
-
-    #     self.num_moves = 0
 
     def _SAT_coordinate(self, SAT, SAT_len, time, speed):
         """
@@ -128,8 +119,6 @@ class LEOSATEnv(AECEnv):
 
 
     def reset(self, seed=None, return_info=False, options=None):
-        self.agents = copy(self.possible_agents)
-
         self.timestep = 0
 
         self.agents = self.possible_agents[:]
@@ -160,6 +149,7 @@ class LEOSATEnv(AECEnv):
                 self.visible_time[i][j] = self._get_visible_time(self.SAT_point[j], self.SAT_speed, self.SAT_coverage_radius, self.GS[i])
 
         # observations
+        # ====================================================== 수정해야함!
         self.observations = {}
         for i in range(self.GS_size):
             observation = (
@@ -173,6 +163,7 @@ class LEOSATEnv(AECEnv):
     
     def observe(self, agent):
         # observation of one agent is the previous state of the other
+        print({f"observe: {np.array(self.observations[agent]).shape}"})
         return np.array(self.observations[agent])
 
     def step(self, action):
@@ -235,6 +226,9 @@ class LEOSATEnv(AECEnv):
                     self.visible_time[i]
                 )
                 self.observations[f"groud_station_{i}"] = observation
+            
+            if self.render_mode == "human":
+                self.render()
         else:
             self._clear_rewards()
         
@@ -242,8 +236,7 @@ class LEOSATEnv(AECEnv):
         self.agent_selection = self._agent_selector.next()
         self._accumulate_rewards()
 
-        if self.render_mode == "human":
-            self.render()
+        
 
         #return self.observations, self.rewards, self.terminations, self.truncations, self.infos
         
