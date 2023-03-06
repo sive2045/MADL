@@ -34,7 +34,7 @@ class LEOSATEnv(AECEnv):
         self.SAT_Load = np.full(self.SAT_len*self.SAT_plane, 5) # the available channels of SAT
         self.SAT_W = 10 # MHz BW budget of SAT
 
-        self.service_indicator = np.zeros((self.GS_size, self.SAT_len*2)) # indicator: users are served by SAT (one-hot vector)
+        self.service_indicator = np.zeros((self.GS_size, self.SAT_len*self.SAT_plane)) # indicator: users are served by SAT (one-hot vector)
 
         self.agents = [f"groud_station_{i}" for i in range(self.GS_size)]
         self.possible_agents = self.agents[:]
@@ -45,7 +45,7 @@ class LEOSATEnv(AECEnv):
             i: spaces.Dict(
                 {
                     "observation": spaces.Box(
-                        low=0, high=1, shape=(self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane, self.SAT_len * self.SAT_plane), dtype=np.int8
+                        low=0, high=1, shape=(3, self.SAT_len * self.SAT_plane), dtype=np.int8
                     ),
                 }
             )
@@ -125,7 +125,7 @@ class LEOSATEnv(AECEnv):
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.next()
 
-        self.state = {agent: self._none for agent in self.agents}
+        self.states = {agent: self._none for agent in self.agents}
         self.rewards = {agent: 0 for agent in self.agents}
         self._cumulative_rewards = {agent: 0 for agent in self.agents}
         self.terminations = {agent: False for agent in self.agents}
@@ -177,31 +177,32 @@ class LEOSATEnv(AECEnv):
         # Action must select a covering SAT
         agent = self.agent_selection
         print(f"agent: {agent}")
-        self.state[self.agent_selection] = action
-        print(f"state : {self.state[agent]}")
+        self.states[self.agent_selection] = action
+        print(f"state : {self.states[agent]}")
         if self._agent_selector.is_last():
             # rewards
             for i in range(self.GS_size):
                 reward = 0
 
                 # non-coverage area
-                if self.coverage_indicator[i][self.state[self.agents[i]]] == 0:
+                if self.coverage_indicator[i][self.states[self.agents[i]]] == 0:
                     reward = -20
                 # HO occur
-                elif self.service_indicator[i][self.state[self.agents[i]]] == 0:
+                elif self.service_indicator[i][self.states[self.agents[i]]] == 0:
                     reward = -10
                 else:
                 # Overload
-                    if np.count_nonzero(self.state[self.agents[:]] == self.state[self.agents[i]]) > self.SAT_Load[i]:
+                    _actions = np.array(list(self.states.values()))
+                    if np.count_nonzero(_actions == _actions[i]) > self.SAT_Load[_actions[i]]:
                         reward = -5
                     else:
-                        reward = self.visible_time[i][self.state[self.agents[i]]]
+                        reward = self.visible_time[i][_actions[i]]
                 self.rewards[self.agents[i]] = reward
         
             # Update service indicator
             self.service_indicator = np.zeros((self.GS_size, self.SAT_len*self.SAT_plane))
             for i in range(self.GS_size):
-                self.service_indicator[i][self.state[self.agents[i]]] = 1
+                self.service_indicator[i][self.states[self.agents[i]]] = 1
     
             # Check termination conditions
             if self.timestep == self.terminal_time:
