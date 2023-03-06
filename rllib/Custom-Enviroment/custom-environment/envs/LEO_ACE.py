@@ -260,6 +260,12 @@ class LEOSATEnv(AECEnv):
         axes.axis([-50, 200, -50, 150])
         axes.plot(self.SAT_point[:,0], self.SAT_point[:,1], 'o')
 
+        for i in range(self.GS_size):
+            axes.plot(
+                (self.GS[i,0], self.SAT_point[self.states[self.agents[i]],0]),(self.GS[i,1], self.SAT_point[self.states[self.agents[i]],1])
+                , "--k", linewidth=1
+                )
+
         plt.show()
 
     
